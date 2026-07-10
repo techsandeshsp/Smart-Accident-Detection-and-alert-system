@@ -1,0 +1,124 @@
+/* app used for a massage : https://user.ultramsg.com/app/instances/instance.php?id=181387 */
+
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+
+const char* ssid = "Arun";
+const char* password = "aaaaaaaa";
+
+// GPS
+SoftwareSerial gpsSerial(D5, D6);   // RX,TX
+TinyGPSPlus gps;
+
+// Sensor
+int xPin = A0;
+int threshold = 10;
+
+// WhatsApp
+String phone = "918310090293";
+String token = "tfnwhidi03v76rlt";
+String instance = "instance181387";
+
+// Alert timer
+unsigned long lastAlert = 0;
+const unsigned long alertDelay = 10000; // 10 seconds
+
+void sendWhatsApp(String msg)
+{
+WiFiClientSecure client;
+client.setInsecure();
+
+HTTPClient http;
+
+msg.replace(" ", "%20");
+msg.replace("\n", "%0A");
+
+String url =
+"https://api.ultramsg.com/" + instance +
+"/messages/chat?token=" + token +
+"&to=" + phone +
+"&body=" + msg;
+
+Serial.println(url);
+
+http.begin(client, url);
+
+int httpCode = http.GET();
+
+Serial.print("HTTP Code: ");
+Serial.println(httpCode);
+
+String payload = http.getString();
+Serial.println(payload);
+
+http.end();
+}
+
+void setup()
+{
+Serial.begin(115200);
+gpsSerial.begin(9600);
+
+WiFi.begin(ssid, password);
+
+Serial.print("Connecting WiFi");
+
+while (WiFi.status() != WL_CONNECTED)
+{
+delay(500);
+Serial.print(".");
+}
+
+Serial.println("\nWiFi Connected");
+
+sendWhatsApp("Sandesh Accident Detection System Started");
+}
+
+void loop()
+{
+while (gpsSerial.available())
+{
+gps.encode(gpsSerial.read());
+}
+
+int x = analogRead(xPin);
+
+Serial.print("Sensor Value = ");
+Serial.println(x);
+
+if (x > threshold)
+{
+if (millis() - lastAlert > alertDelay)
+{
+Serial.println("ACCIDENT DETECTED");
+
+  if (gps.location.isValid())
+  {
+    String lat = String(gps.location.lat(), 6);
+    String lon = String(gps.location.lng(), 6);
+
+    String message =
+      "ACCIDENT DETECTED!\n"
+      "Latitude: " + lat +
+      "\nLongitude: " + lon +
+      "\nLocation:\nhttps://maps.google.com/?q=" +
+      lat + "," + lon;
+
+    sendWhatsApp(message);
+  }
+  else
+  {
+    sendWhatsApp("ACCIDENT DETECTED - GPS NOT LOCKED");
+  }
+
+  lastAlert = millis();
+}
+
+
+}
+
+delay(200);
+}
